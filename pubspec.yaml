@@ -1,7 +1,7 @@
 name: otel_connectivity_plus
 description: OpenTelemetry instrumentation for `package:connectivity_plus`.
   Bridges connectivity changes into OTel as events on the active span.
-version: 0.2.0
+version: 0.3.0-wip
 repository: https://github.com/dartastic/otel_connectivity_plus
 homepage: https://dartastic.io
 
