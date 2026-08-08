@@ -15,9 +15,33 @@ final sub = listenConnectivityTraced();
 ```
 
 `recordConnectivityResults(results)` is the low-level helper —
-adds a `network.connectivity_change` event with
-`network.connection.type` (e.g. `wifi,mobile`) to whatever span
-is currently active.
+adds a `network.connectivity_change` event with the registry
+`network.connection.type` attribute to whatever span is currently
+active.
+
+## Registry value mapping
+
+The registry defines `network.connection.type` as a single value
+from `wifi` / `wired` / `cell` / `unavailable` / `unknown` — the
+raw connectivity_plus names are not registry values. This package
+maps them:
+
+| connectivity_plus | emitted |
+|---|---|
+| `wifi` | `wifi` |
+| `ethernet` | `wired` |
+| `mobile` | `cell` |
+| `none` (or empty list) | `unavailable` |
+| `vpn` / `bluetooth` / `other` | `unknown` (no registry value) |
+
+connectivity_plus reports a *list* of active transports; the
+primary one is chosen wifi > wired > cell (a VPN rides on one of
+the physical transports — when the physical transport is also
+reported, it wins).
+
+The event *name* `network.connectivity_change` is a SIG-proposal
+candidate (the registry has no connectivity-change event yet); the
+attribute on it is pure registry semconv.
 
 Connectivity changes are intentionally **events on the active
 span**, not standalone spans — a long-lived connectivity span

@@ -10,17 +10,49 @@ import 'connectivity_suppression.dart';
 
 const _tracerName = 'otel_connectivity_plus';
 
+/// Event name for connectivity transitions.
+///
+/// The OTel registry has no connectivity-change event yet; this name
+/// is a SIG-proposal candidate, chosen to sit beside the registry's
+/// `network.*` attribute namespace. The *attribute* on the event is
+/// pure registry semconv.
+const String connectivityChangeEventName = 'network.connectivity_change';
+
 Tracer _tracer() => OTel.tracerProvider().getTracer(_tracerName);
 
-String _resultsToString(List<ConnectivityResult> results) {
-  if (results.isEmpty) return 'none';
-  return results.map((r) => r.name).join(',');
+/// Maps connectivity_plus results onto the registry
+/// `network.connection.type` value set (`wifi` / `wired` / `cell` /
+/// `unavailable` / `unknown`) — the raw connectivity_plus names
+/// (`mobile`, `ethernet`, `none`, ...) are NOT registry values.
+///
+/// connectivity_plus reports a *list* of active transports while the
+/// registry attribute is a single value, so the primary transport is
+/// chosen in fixed priority order: wifi > wired > cell. `vpn`,
+/// `bluetooth`, and `other` have no registry value; when nothing
+/// mappable is active they collapse to `unknown` (a VPN rides on one
+/// of the physical transports anyway — when the physical transport
+/// is also reported, that wins).
+String _primaryConnectionType(List<ConnectivityResult> results) {
+  if (results.isEmpty || results.contains(ConnectivityResult.none)) {
+    return NetworkConnectionType.unavailable.value;
+  }
+  if (results.contains(ConnectivityResult.wifi)) {
+    return NetworkConnectionType.wifi.value;
+  }
+  if (results.contains(ConnectivityResult.ethernet)) {
+    return NetworkConnectionType.wired.value;
+  }
+  if (results.contains(ConnectivityResult.mobile)) {
+    return NetworkConnectionType.cell.value;
+  }
+  return NetworkConnectionType.unknown.value;
 }
 
 /// Records the [results] of a connectivity check as an event named
-/// `network.connectivity_change` on the active span, with
-/// `network.connection.type` carrying a comma-separated list of
-/// active connectivity types.
+/// [connectivityChangeEventName] on the active span, with the
+/// registry attribute `network.connection.type` carrying the primary
+/// transport mapped onto the registry value set (see
+/// [_primaryConnectionType] for the mapping).
 ///
 /// If no span is active, the event is dropped (no orphan spans
 /// are created — connectivity changes are a poor span shape).
@@ -29,9 +61,9 @@ void recordConnectivityResults(List<ConnectivityResult> results) {
   final activeSpan = Context.current.span;
   if (activeSpan == null || !activeSpan.isValid) return;
   activeSpan.addEventNow(
-    'network.connectivity_change',
+    connectivityChangeEventName,
     OTel.attributesFromMap(<String, Object>{
-      'network.connection.type': _resultsToString(results),
+      Network.networkConnectionType.key: _primaryConnectionType(results),
     }),
   );
 }
@@ -63,8 +95,8 @@ Future<List<ConnectivityResult>> tracedCheckConnectivity({
     final results = await c.checkConnectivity();
     span.addAttributes(OTel.attributes([
       OTel.attributeString(
-        'network.connection.type',
-        _resultsToString(results),
+        Network.networkConnectionType.key,
+        _primaryConnectionType(results),
       ),
     ]));
     return results;

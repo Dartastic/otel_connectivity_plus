@@ -66,7 +66,47 @@ void main() {
         for (final a in (event.attributes?.toList() ?? <Attribute<Object>>[]))
           a.key: a.value,
       };
-      expect(attrs['network.connection.type'], equals('wifi,mobile'));
+      // Registry value set, single primary transport: wifi wins over
+      // cell when both are active.
+      expect(attrs['network.connection.type'], equals('wifi'));
+    });
+
+    test('maps connectivity_plus names onto the registry value set', () async {
+      final observed = <String>[];
+      await OTel.tracer().startActiveSpanAsync<void>(
+        name: 'app',
+        fn: (_) async {
+          recordConnectivityResults([ConnectivityResult.mobile]);
+          recordConnectivityResults([ConnectivityResult.ethernet]);
+          recordConnectivityResults([ConnectivityResult.none]);
+          recordConnectivityResults([]);
+          recordConnectivityResults([ConnectivityResult.vpn]);
+          recordConnectivityResults([ConnectivityResult.bluetooth]);
+        },
+      );
+
+      final span = exporter.spans.firstWhere((s) => s.name == 'app');
+      for (final e in span.spanEvents ?? <SpanEvent>[]) {
+        if (e.name != 'network.connectivity_change') continue;
+        for (final a in e.attributes?.toList() ?? <Attribute<Object>>[]) {
+          if (a.key == 'network.connection.type') {
+            observed.add(a.value as String);
+          }
+        }
+      }
+      // mobile->cell, ethernet->wired, none/empty->unavailable,
+      // vpn/bluetooth (no registry value) -> unknown.
+      expect(
+        observed,
+        equals([
+          'cell',
+          'wired',
+          'unavailable',
+          'unavailable',
+          'unknown',
+          'unknown'
+        ]),
+      );
     });
 
     test('no active span — event is dropped silently', () {
