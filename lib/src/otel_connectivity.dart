@@ -7,6 +7,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dartastic_opentelemetry/dartastic_opentelemetry.dart';
 
 import 'connectivity_suppression.dart';
+import 'otel_guard.dart';
 
 const _tracerName = 'otel_connectivity_plus';
 
@@ -56,30 +57,48 @@ String _primaryConnectionType(List<ConnectivityResult> results) {
 ///
 /// If no span is active, the event is dropped (no orphan spans
 /// are created — connectivity changes are a poor span shape).
+///
+/// Never throws: an uninitialized OTel SDK drops the event instead of
+/// propagating out of whatever the caller was doing (typically an
+/// `onConnectivityChanged` listener).
 void recordConnectivityResults(List<ConnectivityResult> results) {
   if (connectivityInstrumentationSuppressed()) return;
   final activeSpan = Context.current.span;
   if (activeSpan == null || !activeSpan.isValid) return;
-  activeSpan.addEventNow(
-    connectivityChangeEventName,
-    OTel.attributesFromMap(<String, Object>{
-      Network.networkConnectionType.key: _primaryConnectionType(results),
-    }),
-  );
+  tryTelemetryEffect(() {
+    activeSpan.addEventNow(
+      connectivityChangeEventName,
+      OTel.attributesFromMap(<String, Object>{
+        Network.networkConnectionType.key: _primaryConnectionType(results),
+      }),
+    );
+  });
 }
 
 /// Subscribes to [Connectivity.onConnectivityChanged] and emits an
 /// event on the active span for every emission. Returns the
 /// underlying [StreamSubscription] so callers can cancel it.
+///
+/// The subscription is instrumentation-only, so a stream error is
+/// absorbed here rather than being reported as an unhandled error by
+/// the surrounding zone.
 StreamSubscription<List<ConnectivityResult>> listenConnectivityTraced({
   Connectivity? connectivity,
 }) {
   final c = connectivity ?? Connectivity();
-  return c.onConnectivityChanged.listen(recordConnectivityResults);
+  return c.onConnectivityChanged.listen(
+    recordConnectivityResults,
+    onError: (Object _, StackTrace __) {},
+  );
 }
 
 /// Traced one-shot connectivity check. Opens a CLIENT span
 /// recording the result as `network.connection.type`.
+///
+/// The connectivity check itself always runs. When the OTel SDK is not
+/// initialized the span is skipped and the raw
+/// `Connectivity.checkConnectivity()` result is returned — telemetry
+/// never decides whether the app gets to know its network state.
 Future<List<ConnectivityResult>> tracedCheckConnectivity({
   Connectivity? connectivity,
 }) async {
@@ -87,24 +106,32 @@ Future<List<ConnectivityResult>> tracedCheckConnectivity({
   if (connectivityInstrumentationSuppressed()) {
     return c.checkConnectivity();
   }
-  final span = _tracer().startSpan(
-    'connectivity.check',
-    kind: SpanKind.client,
+  final span = tryTelemetry(
+    () => _tracer().startSpan(
+      'connectivity.check',
+      kind: SpanKind.client,
+    ),
   );
+  if (span == null) return c.checkConnectivity();
   try {
     final results = await c.checkConnectivity();
-    span.addAttributes(OTel.attributes([
-      OTel.attributeString(
-        Network.networkConnectionType.key,
-        _primaryConnectionType(results),
-      ),
-    ]));
+    tryTelemetryEffect(() {
+      span.addAttributes(OTel.attributes([
+        OTel.attributeString(
+          Network.networkConnectionType.key,
+          _primaryConnectionType(results),
+        ),
+      ]));
+    });
     return results;
   } catch (e, st) {
-    span.recordException(e, stackTrace: st);
-    span.setStatus(SpanStatusCode.Error, e.toString());
+    tryTelemetryEffect(() {
+      span
+        ..recordException(e, stackTrace: st)
+        ..setStatus(SpanStatusCode.Error, e.toString());
+    });
     rethrow;
   } finally {
-    span.end();
+    tryTelemetryEffect(span.end);
   }
 }

@@ -2,6 +2,20 @@
 
 ## [0.3.0-wip]
 
+### Fixed
+
+- `tracedCheckConnectivity` no longer throws when the OTel SDK is not
+  initialized. The connectivity check always runs and its result always
+  reaches the caller; the span is skipped instead. Previously
+  `OTel.tracerProvider()` threw
+  `StateError: OTel.initialize() must be called first.` before
+  `Connectivity.checkConnectivity()` was ever called.
+- `recordConnectivityResults` is now guaranteed not to throw, so it is
+  safe as a bare `onConnectivityChanged` listener.
+- `listenConnectivityTraced` absorbs stream errors on its own
+  instrumentation-only subscription instead of letting them surface as
+  unhandled zone errors.
+
 ## [0.2.0] - 2026-08-08
 
 ### Changed
