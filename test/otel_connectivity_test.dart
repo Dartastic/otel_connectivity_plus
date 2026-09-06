@@ -133,4 +133,61 @@ void main() {
       );
     });
   });
+
+  // Regression: instrumentation must never be in the functional path.
+  // Before the guard, `_tracer()` threw
+  // `StateError: OTel.initialize() must be called first.` before
+  // `checkConnectivity()` ran, so the app never learned its network
+  // state.
+  group('OTel SDK not initialized', () {
+    setUp(() async {
+      await OTel.reset();
+    });
+
+    test('tracedCheckConnectivity still returns the result', () async {
+      final results = await tracedCheckConnectivity(
+        connectivity: _FakeConnectivity([ConnectivityResult.wifi]),
+      );
+      expect(results, equals([ConnectivityResult.wifi]));
+    });
+
+    test('an error from the check still reaches the caller', () async {
+      await expectLater(
+        tracedCheckConnectivity(
+          connectivity: _FakeConnectivity(
+            null,
+            error: const FormatException('platform channel down'),
+          ),
+        ),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('recordConnectivityResults does not throw', () {
+      expect(
+        () => recordConnectivityResults([ConnectivityResult.wifi]),
+        returnsNormally,
+      );
+    });
+  });
+}
+
+/// A [Connectivity] stand-in so the traced wrapper can be exercised
+/// without a platform channel.
+class _FakeConnectivity implements Connectivity {
+  _FakeConnectivity(this.results, {this.error});
+
+  final List<ConnectivityResult>? results;
+  final Exception? error;
+
+  @override
+  Future<List<ConnectivityResult>> checkConnectivity() async {
+    final e = error;
+    if (e != null) throw e;
+    return results!;
+  }
+
+  @override
+  Stream<List<ConnectivityResult>> get onConnectivityChanged =>
+      const Stream<List<ConnectivityResult>>.empty();
 }
