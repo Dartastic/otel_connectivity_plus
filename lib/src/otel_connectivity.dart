@@ -4,7 +4,7 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:dartastic_opentelemetry/dartastic_opentelemetry.dart';
+import 'package:dartastic_opentelemetry_api/dartastic_opentelemetry_api.dart';
 
 import 'connectivity_suppression.dart';
 
@@ -18,7 +18,7 @@ const _tracerName = 'otel_connectivity_plus';
 /// pure registry semconv.
 const String connectivityChangeEventName = 'network.connectivity_change';
 
-Tracer _tracer() => OTel.tracerProvider().getTracer(_tracerName);
+APITracer _tracer() => OTelAPI.tracerProvider().getTracer(_tracerName);
 
 /// Maps connectivity_plus results onto the registry
 /// `network.connection.type` value set (`wifi` / `wired` / `cell` /
@@ -62,7 +62,7 @@ void recordConnectivityResults(List<ConnectivityResult> results) {
   if (activeSpan == null || !activeSpan.isValid) return;
   activeSpan.addEventNow(
     connectivityChangeEventName,
-    OTel.attributesFromMap(<String, Object>{
+    OTelAPI.attributesFromMap(<String, Object>{
       Network.networkConnectionType.key: _primaryConnectionType(results),
     }),
   );
@@ -93,8 +93,8 @@ Future<List<ConnectivityResult>> tracedCheckConnectivity({
   );
   try {
     final results = await c.checkConnectivity();
-    span.addAttributes(OTel.attributes([
-      OTel.attributeString(
+    span.addAttributes(OTelAPI.attributes([
+      OTelAPI.attributeString(
         Network.networkConnectionType.key,
         _primaryConnectionType(results),
       ),
