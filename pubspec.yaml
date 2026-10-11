@@ -1,7 +1,7 @@
 name: otel_connectivity_plus
 description: OpenTelemetry instrumentation for `package:connectivity_plus`.
   Bridges connectivity changes into OTel as events on the active span.
-version: 0.3.0-wip
+version: 1.0.0-wip
 repository: https://github.com/dartastic/otel_connectivity_plus
 homepage: https://dartastic.io
 
@@ -11,8 +11,8 @@ environment:
 
 dependencies:
   connectivity_plus: ">=6.0.0 <8.0.0"
-  dartastic_opentelemetry: ^1.1.0-beta.12
-  dartastic_opentelemetry_api: ^1.0.0-rc.1
+  dartastic_opentelemetry: ^1.1.0-beta.17
+  dartastic_opentelemetry_api: '>=1.0.0-rc.4 <1.0.0-rc.5'
   flutter:
     sdk: flutter
 
