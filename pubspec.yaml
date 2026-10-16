@@ -3,7 +3,7 @@ description: >-
   OpenTelemetry instrumentation for connectivity_plus by Dartastic.io. Adds
   standard OpenTelemetry observability to applications that use
   connectivity_plus.
-version: 0.3.1-wip
+version: 0.3.1
 repository: https://github.com/dartastic/otel_connectivity_plus
 homepage: https://dartastic.io
 
